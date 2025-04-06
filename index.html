@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mood Mirror</title>
+  <!-- Load TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <!-- Load Teachable Machine image library -->
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #333;
+      color: white;
+      transition: background 0.5s;
+    }
+
+    #webcam-container canvas {
+      border-radius: 10px;
+    }
+
+    button {
+      margin-bottom: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+
+    #meme {
+    margin-top: 20px;
+    max-width: 300px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <h1>Mood Mirror</h1>
+  
+  <!-- Button to start the webcam and model -->
+  <button onclick="init()">Start</button>
+  
+  <!-- Container for webcam video -->
+  <div id="webcam-container"></div>
+  
+  <!-- Container for classification labels and probabilities -->
+  <div id="label-container"></div>
+
+  <img id="meme" src="" alt="Mood meme will appear here" style="display:none;" />
+
+  <script>
+    // URL to my trained Teachable Machine model
+    const URL = "https://teachablemachine.withgoogle.com/models/48TSttyWl/";
+
+    // Global variables
+    let model, webcam, labelContainer, maxPredictions;
+    let previousLabel = "";
+
+    // Minimum confidence required to change background
+    const confidenceThreshold = 0.8;
+
+    // Backgrounds and memes per mood
+    const backgrounds = {
+      "happy": "linear-gradient(to right, #f6d365, #fda085)",
+      "sad": "linear-gradient(to right, #4b6cb7, #182848)",
+      "neutral": "#444"
+    };
+
+    const memes = {
+      "happy": "https://i.pinimg.com/736x/dc/ae/89/dcae89ba0987641157f54e5f34eeeb5c.jpg",
+      "neutral": "https://platform.theverge.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/6438793/this-is-fine.jpg?quality=90&strip=all&crop=8.3333333333333,0,83.333333333333,100",
+      "sad": "https://ih1.redbubble.net/image.2635458499.9723/raf,360x360,075,t,fafafa:ca443f4786.u3.jpg"
+    };
+
+    // Initialize the model and webcam
+    async function init() {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      // Load the model and metadata
+      model = await tmImage.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      // Setup webcam with 224x224 resolution and flipped horizontally
+      webcam = new tmImage.Webcam(224, 224, true);
+      await webcam.setup();   // Ask for camera permissions
+      await webcam.play();    // Start the webcam
+      window.requestAnimationFrame(loop);   // Start prediction loop
+
+       // Display the webcam feed
+      document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+      // Create text containers for each class label
+      labelContainer = document.getElementById("label-container");
+      for (let i = 0; i < maxPredictions; i++) {
+        labelContainer.appendChild(document.createElement("div"));
+      }
+    }
+
+    // Repeatedly update the webcam frame and make predictions
+    async function loop() {
+      webcam.update();    // Update webcam frame
+      await predict();    // Run prediction
+      window.requestAnimationFrame(loop);   // Loop again
+    }
+
+    // Run prediction and update the background
+    async function predict() {
+      const prediction = await model.predict(webcam.canvas);
+
+      // Display all predictions and their confidence scores
+      for (let i = 0; i < prediction.length; i++) {
+        const p = prediction[i];
+        const label = `${p.className}: ${(p.probability * 100).toFixed(1)}%`;
+        labelContainer.childNodes[i].innerText = label;
+      }
+
+      // Find the prediction with the highest confidence
+      const topPrediction = prediction.reduce((max, current) => 
+        current.probability > max.probability ? current : max
+      );
+
+      const confidence = topPrediction.probability;
+
+      const label = topPrediction.className.toLowerCase();
+
+      // Change background only if label changed and confidence is high enough
+      if (label !== previousLabel && confidence >= confidenceThreshold) {
+        previousLabel = label;
+
+        // Change background
+        const bg = backgrounds[label];
+        if (bg) {
+          document.body.style.background = bg;
+        }
+
+        // Show meme
+        const meme = memes[label];
+        const memeEl = document.getElementById("meme");
+        if (meme) {
+          memeEl.src = meme;
+          memeEl.style.display = "block";
+        } else {
+          memeEl.style.display = "none";
+        }
+      }
+    }
+  </script>
+</body>
+</html>
